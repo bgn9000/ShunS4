@@ -4463,88 +4463,13 @@ static inline int l2cap_config_rsp(struct l2cap_conn *conn, struct l2cap_cmd_hdr
 	if (!sk)
 		return 0;
 
-	pi = l2cap_pi(sk);
+		if (type != L2CAP_CONF_RFC)
+			continue;
 
-	if (pi->reconf_state != L2CAP_RECONF_NONE)  {
-		l2cap_amp_move_reconf_rsp(sk, rsp->data, len, result);
-		goto done;
-	}
-
-	switch (result) {
-	case L2CAP_CONF_SUCCESS:
-		if (pi->conf_state & L2CAP_CONF_LOCKSTEP &&
-				!(pi->conf_state & L2CAP_CONF_LOCKSTEP_PEND)) {
-			/* Lockstep procedure requires a pending response
-			 * before success.
-			 */
-			l2cap_send_disconn_req(conn, sk, ECONNRESET);
-			goto done;
-		}
-
-		l2cap_conf_rfc_get(sk, rsp->data, len);
-		break;
-
-	case L2CAP_CONF_PENDING:
-		if (!(pi->conf_state & L2CAP_CONF_LOCKSTEP)) {
-			l2cap_send_disconn_req(conn, sk, ECONNRESET);
-			goto done;
-		}
-
-		l2cap_conf_rfc_get(sk, rsp->data, len);
-
-		pi->conf_state |= L2CAP_CONF_LOCKSTEP_PEND;
-
-		l2cap_conf_ext_fs_get(sk, rsp->data, len);
-
-		if (pi->amp_id && pi->conf_state & L2CAP_CONF_PEND_SENT) {
-			struct hci_chan *chan;
-
-			/* Already sent a 'pending' response, so set up
-			 * the logical link now
-			 */
-			chan = l2cap_chan_admit(pi->amp_id, sk);
-			if (!chan) {
-				l2cap_send_disconn_req(pi->conn, sk,
-							ECONNRESET);
-				goto done;
-			}
-
-			if (chan->state == BT_CONNECTED)
-				l2cap_create_cfm(chan, 0);
-		}
-
-		goto done;
-
-	case L2CAP_CONF_UNACCEPT:
-		if (pi->num_conf_rsp <= L2CAP_CONF_MAX_CONF_RSP) {
-			char req[64];
-
-			if (len > sizeof(req) - sizeof(struct l2cap_conf_req)) {
-				l2cap_send_disconn_req(conn, sk, ECONNRESET);
-				goto done;
-			}
-
-			/* throw out any old stored conf requests */
-			result = L2CAP_CONF_SUCCESS;
-			len = l2cap_parse_conf_rsp(sk, rsp->data,
-							len, req, &result);
-			if (len < 0) {
-				l2cap_send_disconn_req(conn, sk, ECONNRESET);
-				goto done;
-			}
-
-			l2cap_send_cmd(conn, l2cap_get_ident(conn),
-						L2CAP_CONF_REQ, len, req);
-			pi->num_conf_req++;
-			if (result != L2CAP_CONF_SUCCESS)
-				goto done;
+		if (olen != sizeof(rfc))
 			break;
-		}
 
-	default:
-		sk->sk_err = ECONNRESET;
-		l2cap_sock_set_timer(sk, HZ * 5);
-		l2cap_send_disconn_req(conn, sk, ECONNRESET);
+		memcpy(&rfc, (void *)val, olen);
 		goto done;
 	}
 
