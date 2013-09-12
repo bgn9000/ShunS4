@@ -11,7 +11,7 @@
           Ex)  CROSS_COMPILE=/usr/local/toolchain/arm-eabi-4.6/bin/arm-eabi-          // check the location of toolchain
   	
 		$ export ARCH=arm
-		$ make VARIANT_DEFCONFIG=jf_eur_defconfig jf_defconfig
+		$ make VARIANT_DEFCONFIG=jf_eur_defconfig jf_defconfig SELINUX_DEFCONFIG=jfselinux_defconfig
 		$ make
 
 2. Output files
