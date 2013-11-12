@@ -24,7 +24,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd.h 411129 2013-07-05 01:24:07Z $
+ * $Id: dhd.h 418908 2013-08-18 02:24:33Z $
  */
 
 /****************
@@ -324,8 +324,13 @@ typedef struct dhd_pub {
 #if defined(BCMSUP_4WAY_HANDSHAKE) && defined(WLAN_AKM_SUITE_FT_8021X)
 	bool fw_4way_handshake;		/* Whether firmware will to do the 4way handshake. */
 #endif
+#if defined(CUSTOMER_HW4)
+	bool dhd_bug_on;
+#endif /* CUSTOMER_HW4 */
 } dhd_pub_t;
-
+#if defined(CUSTOMER_HW4)
+#define MAX_RESCHED_CNT 600
+#endif /* CUSTOMER_HW4 */
 
 	#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 27)) && defined(CONFIG_PM_SLEEP)
 
@@ -603,6 +608,7 @@ extern int dhd_dev_get_pno_status(struct net_device *dev);
 #define DHD_MULTICAST4_FILTER_NUM	2
 #define DHD_MULTICAST6_FILTER_NUM	3
 #define DHD_MDNS_FILTER_NUM		4
+#define DHD_ARP_FILTER_NUM		5
 extern int 	dhd_os_enable_packet_filter(dhd_pub_t *dhdp, int val);
 extern void dhd_enable_packet_filter(int value, dhd_pub_t *dhd);
 extern int net_os_enable_packet_filter(struct net_device *dev, int val);
@@ -780,6 +786,11 @@ extern uint dhd_force_tx_queueing;
 #ifndef CUSTOM_SUSPEND_BCN_LI_DTIM
 #define CUSTOM_SUSPEND_BCN_LI_DTIM		DEFAULT_SUSPEND_BCN_LI_DTIM
 #endif
+
+#define DEFAULT_WIFI_TURNOFF_DELAY		0
+#ifndef WIFI_TURNOFF_DELAY
+#define WIFI_TURNOFF_DELAY				DEFAULT_WIFI_TURNOFF_DELAY
+#endif /* WIFI_TURNOFF_DELAY */
 
 #ifdef RXFRAME_THREAD
 #ifndef CUSTOM_RXF_PRIO_SETTING

@@ -21,7 +21,7 @@
  * software in any way with any other Broadcom software provided under a license
  * other than the GPL, without Broadcom's express prior written consent.
  *
- * $Id: dhd_common.c 408026 2013-06-17 08:48:21Z $
+ * $Id: dhd_common.c 412802 2013-07-16 16:06:51Z $
  */
 #include <typedefs.h>
 #include <osl.h>
@@ -284,6 +284,13 @@ dhd_wl_ioctl(dhd_pub_t *dhd_pub, int ifindex, wl_ioctl_t *ioc, void *buf, int le
 #endif /* CUSTOMER_HW4 */
 			/* Send hang event only if dhd_open() was success */
 			dhd_os_check_hang(dhd_pub, ifindex, ret);
+
+		if (ret == -ETIMEDOUT && !dhd_pub->up) {
+			DHD_ERROR(("%s: 'resumed on timeout' error is "
+				"occurred before the interface does not"
+				" bring up\n", __FUNCTION__));
+			dhd_pub->busstate = DHD_BUS_DOWN;
+		}
 
 	dhd_os_proto_unblock(dhd_pub);
 

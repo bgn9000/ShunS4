@@ -1691,6 +1691,12 @@ static int __cpuinit init_timers_cpu(int cpu)
 		base = per_cpu(tvec_bases, cpu);
 	}
 
+	if ((*lock_init) != cpu) {
+		*lock_init = cpu;
+		spin_lock_init(&base->lock);
+		printk(KERN_INFO "tvec base lock initialized for cpu%d\n", cpu);
+	}
+
 	for (j = 0; j < TVN_SIZE; j++) {
 		INIT_LIST_HEAD(base->tv5.vec + j);
 		INIT_LIST_HEAD(base->tv4.vec + j);

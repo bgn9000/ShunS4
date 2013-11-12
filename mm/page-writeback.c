@@ -65,7 +65,7 @@ static long ratelimit_pages = 32;
 /*
  * Start background writeback (via writeback threads) at this percentage
  */
-int dirty_background_ratio = 10;
+int dirty_background_ratio = 1;
 
 /*
  * dirty_background_bytes starts at 0 (disabled) so that it is a function of
@@ -82,7 +82,7 @@ int vm_highmem_is_dirtyable;
 /*
  * The generator of dirty data starts writeback at this percentage
  */
-int vm_dirty_ratio = 20;
+int vm_dirty_ratio = 2;
 
 /*
  * vm_dirty_bytes starts at 0 (disabled) so that it is a function of
@@ -93,14 +93,14 @@ unsigned long vm_dirty_bytes;
 /*
  * The interval between `kupdate'-style writebacks
  */
-unsigned int dirty_writeback_interval = 5 * 100; /* centiseconds */
+unsigned int dirty_writeback_interval = 3 * 100; /* centiseconds */
 
 EXPORT_SYMBOL_GPL(dirty_writeback_interval);
 
 /*
  * The longest time for which data is allowed to remain dirty
  */
-unsigned int dirty_expire_interval = 30 * 100; /* centiseconds */
+unsigned int dirty_expire_interval = 50; /* centiseconds */
 
 /*
  * Flag that makes the machine dump writes/reads and block dirtyings.
@@ -180,11 +180,18 @@ static unsigned long highmem_dirtyable_memory(unsigned long total)
 	unsigned long x = 0;
 
 	for_each_node_state(node, N_HIGH_MEMORY) {
+		unsigned long nr_pages;
 		struct zone *z =
 			&NODE_DATA(node)->node_zones[ZONE_HIGHMEM];
 
-		x += zone_page_state(z, NR_FREE_PAGES) +
-		     zone_reclaimable_pages(z) - z->dirty_balance_reserve;
+		nr_pages = zone_page_state(z, NR_FREE_PAGES) +
+		  zone_reclaimable_pages(z);
+		/*
+		 * make sure that the number of pages for this node
+		 * is never "negative".
+		 */
+		nr_pages -= min(nr_pages, z->dirty_balance_reserve);
+		x += nr_pages;
 	}
 	/*
 	 * Unreclaimable memory (kernel memory or anonymous memory
@@ -224,7 +231,7 @@ unsigned long global_dirtyable_memory(void)
 	x -= min(x, dirty_balance_reserve);
 
 	if (!vm_highmem_is_dirtyable)
-		x -= highmem_dirtyable_memory(x);
+		x -= min(x, highmem_dirtyable_memory(x));
 
 	return x + 1;	/* Ensure that we never return 0 */
 }

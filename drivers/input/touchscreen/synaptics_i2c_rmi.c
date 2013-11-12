@@ -132,6 +132,17 @@
 #define CHARGER_DISCONNECTED	0xDF
 #define CONFIGURED (1 << 7)
 
+//KT specifics
+//extern void set_screen_on_off_mhz(unsigned long onoff);
+static bool ktoonservative_is_activef = false;
+extern void boostpulse_relay_kt(void);
+extern void hotplugap_boostpulse(void);
+
+void ktoonservative_is_active(bool val)
+{
+	ktoonservative_is_activef = val;
+}
+
 static int synaptics_rmi4_i2c_read(struct synaptics_rmi4_data *rmi4_data,
 		unsigned short addr, unsigned char *data,
 		unsigned short length);
@@ -609,6 +620,10 @@ static ssize_t synaptics_rmi4_full_pm_cycle_store(struct device *dev,
 #endif
 
 #ifdef TSP_BOOSTER
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+extern int kgsl_pwrctrl_min_pwrlevel_store_kernel(int level);
+extern int kgsl_pwrctrl_num_pwrlevels_show_kernel(void);
+#endif
 static void synaptics_change_dvfs_lock(struct work_struct *work)
 {
 	struct synaptics_rmi4_data *rmi4_data =
@@ -631,6 +646,9 @@ static void synaptics_change_dvfs_lock(struct work_struct *work)
 	} else if (rmi4_data->dvfs_boost_mode == DVFS_STAGE_SINGLE) {
 		retval = set_freq_limit(DVFS_TOUCH_ID, -1);
 		rmi4_data->dvfs_freq = -1;
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+		kgsl_pwrctrl_min_pwrlevel_store_kernel(3);
+#endif
 	}
 
 	if (retval < 0)
@@ -657,6 +675,9 @@ static void synaptics_set_dvfs_off(struct work_struct *work)
 
 	retval = set_freq_limit(DVFS_TOUCH_ID, -1);
 	rmi4_data->dvfs_freq = -1;
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+	kgsl_pwrctrl_min_pwrlevel_store_kernel(3);
+#endif
 
 	if (retval < 0)
 		dev_err(&rmi4_data->i2c_client->dev,
@@ -696,6 +717,9 @@ static void synaptics_set_dvfs_lock(struct synaptics_rmi4_data *rmi4_data,
 					ret = set_freq_limit(DVFS_TOUCH_ID,
 							MIN_TOUCH_LIMIT);
 					rmi4_data->dvfs_freq = MIN_TOUCH_LIMIT;
+#ifdef CONFIG_MSM_KGSL_KERNEL_API_ENABLE
+					kgsl_pwrctrl_min_pwrlevel_store_kernel(2);
+#endif
 
 					if (ret < 0)
 						dev_err(&rmi4_data->i2c_client->dev,
@@ -1497,20 +1521,29 @@ static int synaptics_rmi4_f12_abs_report(struct synaptics_rmi4_data *rmi4_data,
 #ifndef TYPE_B_PROTOCOL
 			input_mt_sync(rmi4_data->input_dev);
 #endif
-
-			if (!rmi4_data->finger[finger].state)
+			if (ktoonservative_is_activef)
+				boostpulse_relay_kt();
+			hotplugap_boostpulse();
+			
+			/*if (!rmi4_data->finger[finger].state)
+			{
 				dev_info(&rmi4_data->i2c_client->dev, "[%d][P] 0x%02x\n",
 					finger, finger_status);
+				//pr_alert("KT TOUCH BOOSTER PRESS");
+			}
 			else
+				rmi4_data->finger[finger].mcount++;*/
+			if (rmi4_data->finger[finger].state)
 				rmi4_data->finger[finger].mcount++;
-
+				
 			touch_count++;
 		}
 
 		if (rmi4_data->finger[finger].state && !finger_status) {
-			dev_info(&rmi4_data->i2c_client->dev, "[%d][R] 0x%02x M[%d] V[%x]\n",
-				finger, finger_status, rmi4_data->finger[finger].mcount,
-				rmi4_data->fw_version_of_ic);
+			//dev_info(&rmi4_data->i2c_client->dev, "[%d][R] 0x%02x M[%d] V[%x]\n",
+			//	finger, finger_status, rmi4_data->finger[finger].mcount,
+			//	rmi4_data->fw_version_of_ic);
+			//pr_alert("KT TOUCH BOOSTER RELEASE");
 
 			rmi4_data->finger[finger].mcount = 0;
 		}
@@ -4105,6 +4138,9 @@ static void synaptics_rmi4_early_suspend(struct early_suspend *h)
 			container_of(h, struct synaptics_rmi4_data,
 			early_suspend);
 
+	//pr_alert("SCREEN POWER OFF");
+	//set_screen_on_off_mhz(false);
+	
 	if (rmi4_data->stay_awake) {
 		rmi4_data->staying_awake = true;
 		return;
@@ -4140,6 +4176,8 @@ static void synaptics_rmi4_late_resume(struct early_suspend *h)
 			container_of(h, struct synaptics_rmi4_data,
 			early_suspend);
 	int retval;
+	//pr_alert("SCREEN POWER ON");
+	//set_screen_on_off_mhz(true);
 
 	if (rmi4_data->staying_awake)
 		return;

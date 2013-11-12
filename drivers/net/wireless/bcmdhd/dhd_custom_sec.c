@@ -66,7 +66,8 @@ struct cntry_locales_custom {
 
 /* Locale table for sec */
 const struct cntry_locales_custom translate_custom_table[] = {
-#if defined(BCM4334_CHIP) || defined(BCM43241_CHIP) || defined(BCM4335_CHIP)
+#if defined(BCM4334_CHIP) || defined(BCM43241_CHIP) || defined(BCM4335_CHIP) || \
+	defined(BCM4339_CHIP)
 	{"",   "XZ", 11},	/* Universal if Country code is unknown or empty */
 	{"IR", "XZ", 11},	/* Universal if Country code is IRAN, (ISLAMIC REPUBLIC OF) */
 	{"SD", "XZ", 11},	/* Universal if Country code is SUDAN */
@@ -75,7 +76,6 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"PS", "XZ", 11},	/* Universal if Country code is PALESTINIAN TERRITORY, OCCUPIED */
 	{"TL", "XZ", 11},	/* Universal if Country code is TIMOR-LESTE (EAST TIMOR) */
 	{"MH", "XZ", 11},	/* Universal if Country code is MARSHALL ISLANDS */
-	{"PK", "XZ", 11},	/* Universal if Country code is PAKISTAN */
 #endif
 #if defined(BCM4330_CHIP) || defined(BCM4334_CHIP) || defined(BCM43241_CHIP)
 	{"AE", "AE", 1},
@@ -169,7 +169,7 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"PG", "XZ", 1},
 	{"SA", "XZ", 1},
 #endif /* BCM4330_CHIP */
-#ifdef BCM4335_CHIP
+#if defined(BCM4335_CHIP) || defined(BCM4339_CHIP)
 	{"AL", "AL", 2},
 	{"DZ", "DZ", 1},
 	{"AS", "AS", 12},
@@ -194,7 +194,7 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"KH", "KH", 2},
 	{"CA", "CA", 31},
 	{"KY", "KY", 3},
-	{"CN", "CN", 24},
+	{"CN", "CN", 38},
 	{"CO", "CO", 17},
 	{"CR", "CR", 17},
 	{"HR", "HR", 4},
@@ -283,7 +283,7 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"VN", "VN", 4},
 	{"ZM", "ZM", 2},
 	{"EC", "EC", 21},
-	{"SV", "SV", 19},
+	{"SV", "SV", 25},
 	{"KR", "KR", 48},
 	{"RU", "RU", 13},
 	{"UA", "UA", 8},
@@ -291,7 +291,7 @@ const struct cntry_locales_custom translate_custom_table[] = {
 	{"FR", "FR", 5},
 	{"MN", "MN", 1},
 	{"NI", "NI", 2},
-#endif /* BCM4335_CHIP */
+#endif /* BCM4335_CHIP || BCM4339_CHIP */
 };
 
 /* Customized Locale convertor
@@ -340,7 +340,7 @@ void get_customized_country_code(char *country_iso_code, wl_country_t *cspec)
 #define CIS_BUF_SIZE            128
 #elif defined(BCM4334_CHIP)
 #define CIS_BUF_SIZE            256
-#else /* BCM4335_CHIP */
+#else /* BCM4335_CHIP || BCM4339_CHIP */
 #define CIS_BUF_SIZE            512
 #endif /* BCM4330_CHIP */
 
@@ -878,7 +878,7 @@ vid_info_t vid_info[] = {
 	{ 6, { 0x00, 0x20, 0xc7, 0x00, 0x00, }, { "murata" } },
 	{ 0, { 0x00, }, { "samsung" } }
 };
-#else /* BCM4335_CHIP */
+#elif defined(BCM4335_CHIP)
 vid_info_t vid_info[] = {
 	{ 3, { 0x33, 0x66, }, { "semcosh" } },		/* B0 Sharp 5G-FEM */
 	{ 3, { 0x33, 0x33, }, { "semco" } },		/* B0 Skyworks 5G-FEM and A0 chip */
@@ -887,6 +887,17 @@ vid_info_t vid_info[] = {
 	{ 3, { 0x00, 0x22, }, { "muratafem2" } },	/* B0 TriQuint 5G-FEM */
 	{ 3, { 0x00, 0x33, }, { "muratafem3" } },	/* 3rd FEM: Reserved */
 	{ 0, { 0x00, }, { "murata" } }	/* Default: for Murata A0 module */
+};
+#elif defined(BCM4339_CHIP)
+vid_info_t vid_info[] = {
+	{ 3, { 0x33, 0x33, }, { "semco" } },		/* 2G Skyworks + 5G Sharp FEM */
+	{ 3, { 0x33, 0x66, }, { "semco" } },		/* Not specified yet */
+	{ 3, { 0x33, 0x88, }, { "semco3rd" } },		/* Not specified yet */
+	{ 3, { 0x90, 0x01, }, { "wisol" } },		/* Not specified yet */
+	{ 3, { 0x90, 0x02, }, { "wisolfem1" } },	/* Not specified yet */
+	{ 3, { 0x00, 0x11, }, { "muratafem1" } },	/* Not specified yet */
+	{ 3, { 0x00, 0x22, }, { "muratafem2" } },	/* Not specified yet */
+	{ 0, { 0x00, }, { "samsung" } }				/* Default: Not specified yet */
 };
 #endif /* BCM_CHIP_ID */
 
@@ -1046,11 +1057,11 @@ static int dhd_write_mac_file(const char *filepath, const char *buf, int buf_len
 	return 0;
 }
 
-#ifdef BCM4335_CHIP
+#if defined(BCM4335_CHIP)|| defined(BCM4339_CHIP)
 #define CIS_MAC_OFFSET 31
 #else
 #define CIS_MAC_OFFSET 33
-#endif /* BCM4335_CHIP */
+#endif /* BCM4335_CHIP || BCM4339_CHIP */
 
 int dhd_check_module_mac(dhd_pub_t *dhd, struct ether_addr *mac)
 {
@@ -1216,7 +1227,6 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 {
 	struct file *fp = NULL;
 	char *filepath = PSMINFO;
-	mm_segment_t oldfs = {0};
 	char power_val = 0;
 	char iovbuf[WL_EVENTING_MASK_LEN + 12];
 	int ret = 0;
@@ -1225,33 +1235,15 @@ void sec_control_pm(dhd_pub_t *dhd, uint *power_mode)
 	g_pm_control = FALSE;
 
 	fp = filp_open(filepath, O_RDONLY, 0);
-	if (IS_ERR(fp)) {
+	if (IS_ERR(fp) || (fp == NULL)) {
 		/* Enable PowerSave Mode */
 		dhd_wl_ioctl_cmd(dhd, WLC_SET_PM, (char *)power_mode,
 			sizeof(uint), TRUE, 0);
-
-		fp = filp_open(filepath, O_RDWR | O_CREAT, 0666);
-		if (IS_ERR(fp) || (fp == NULL)) {
-			DHD_ERROR(("[%s, %d] /data/.psm.info open failed\n",
-				__FUNCTION__, __LINE__));
-			return;
-		} else {
-			oldfs = get_fs();
-			set_fs(get_ds());
-
-			if (fp->f_mode & FMODE_WRITE) {
-				power_val = '1';
-				fp->f_op->write(fp, (const char *)&power_val,
-					sizeof(char), &fp->f_pos);
-			}
-			set_fs(oldfs);
-		}
+		DHD_ERROR(("[%s, %d] /data/.psm.info open failed,"
+			" so set PM to %d\n",
+			__FUNCTION__, __LINE__, *power_mode));
+		return;
 	} else {
-		if (fp == NULL) {
-			DHD_ERROR(("[%s, %d] /data/.psm.info open failed\n",
-				__FUNCTION__, __LINE__));
-			return;
-		}
 		kernel_read(fp, fp->f_pos, &power_val, 1);
 		DHD_ERROR(("POWER_VAL = %c \r\n", power_val));
 

@@ -638,8 +638,6 @@ static int hci_dev_do_close(struct hci_dev *hdev, u8 is_process)
 
 	BT_DBG("%s %p", hdev->name, hdev);
 
-	cancel_delayed_work(&hdev->power_off);
-
 	hci_req_cancel(hdev, ENODEV);
 	hci_req_lock(hdev);
 
@@ -1003,10 +1001,8 @@ static void hci_power_on(struct work_struct *work)
 	BT_DBG("%s", hdev->name);
 
 	err = hci_dev_open(hdev->id);
-	if (err < 0) {
-		mgmt_set_powered_failed(hdev, err);
+	if (err && err != -EALREADY)
 		return;
-	}
 
 	if (test_bit(HCI_AUTO_OFF, &hdev->flags) &&
 				hdev->dev_type == HCI_BREDR)

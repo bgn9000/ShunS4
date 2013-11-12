@@ -518,11 +518,7 @@ static int ecryptfs_write_end(struct file *file,
 			"[0x%.16llx]\n",
 			(unsigned long long)i_size_read(ecryptfs_inode));
 	}
-<<<<<<< HEAD
 		rc = ecryptfs_write_inode_size_to_metadata(ecryptfs_inode);
-=======
-	rc = ecryptfs_write_inode_size_to_metadata(ecryptfs_inode);
->>>>>>> 068478a... eCryptfs: Revert to a writethrough cache model
 	if (rc)
 		printk(KERN_ERR "Error writing inode size to metadata; "
 		       "rc = [%d]\n", rc);

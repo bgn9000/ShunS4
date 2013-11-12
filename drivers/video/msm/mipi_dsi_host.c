@@ -195,7 +195,7 @@ void mipi_dsi_clk_cfg(int on)
 	mutex_lock(&clk_mutex);
 	if (on) {
 		if (dsi_clk_cnt == 0) {
-			mipi_dsi_prepare_clocks();
+			mipi_dsi_prepare_ahb_clocks();
 			mipi_dsi_ahb_ctrl(1);
 			mipi_dsi_clk_enable();
 		}
@@ -205,8 +205,9 @@ void mipi_dsi_clk_cfg(int on)
 			dsi_clk_cnt--;
 			if (dsi_clk_cnt == 0) {
 				mipi_dsi_clk_disable();
-				mipi_dsi_ahb_ctrl(0);
 				mipi_dsi_unprepare_clocks();
+				mipi_dsi_ahb_ctrl(0);
+				mipi_dsi_unprepare_ahb_clocks();
 			}
 		}
 	}
@@ -217,6 +218,7 @@ void mipi_dsi_clk_cfg(int on)
 
 void mipi_dsi_turn_on_clks(void)
 {
+	mipi_dsi_prepare_ahb_clocks();
 	mipi_dsi_ahb_ctrl(1);
 	mipi_dsi_clk_enable();
 }
@@ -224,7 +226,9 @@ void mipi_dsi_turn_on_clks(void)
 void mipi_dsi_turn_off_clks(void)
 {
 	mipi_dsi_clk_disable();
+	mipi_dsi_unprepare_clocks();
 	mipi_dsi_ahb_ctrl(0);
+	mipi_dsi_unprepare_ahb_clocks();
 }
 
 static void mipi_dsi_action(struct list_head *act_list)
@@ -1215,6 +1219,63 @@ int mipi_dsi_cmds_tx(struct dsi_buf *tp, struct dsi_cmd_desc *cmds, int cnt)
 	return cnt;
 }
 
+/*
+ * mipi_dsi_cmds_single_tx:
+ * thread context only
+ */
+int mipi_dsi_cmds_single_tx(struct dsi_buf *tp, struct dsi_cmd_desc *cmds,
+								int cnt)
+{
+	struct dsi_cmd_desc *cm;
+	uint32 dsi_ctrl, ctrl;
+	int i, j = 0, k = 0, cmd_len = 0, video_mode;
+	char *cmds_tx;
+	char *bp;
+	pr_debug("%s:++\n",__func__);
+
+	/*Set Last Bit, only for last packet */
+	for (i = 0; i < cnt; i++) cmds[i].last = 0;
+	cmds[cnt-1].last = 1;
+
+	/* turn on cmd mode
+	* for video mode, do not send cmds more than
+	* one pixel line, since it only transmit it
+	* during BLLP.
+	*/
+	dsi_ctrl = MIPI_INP(MIPI_DSI_BASE + 0x0000);
+	video_mode = dsi_ctrl & 0x02; /* VIDEO_MODE_EN */
+	if (video_mode) {
+		ctrl = dsi_ctrl | 0x04; /* CMD_MODE_EN */
+		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, ctrl);
+	}
+
+	cm = cmds;
+	cmds_tx = kmalloc((DSI_BUF_SIZE + DSI_HOST_HDR_SIZE) * cnt, GFP_KERNEL);
+	mipi_dsi_buf_init(tp);
+	mipi_dsi_enable_irq(DSI_CMD_TERM);
+	for (i = 0; i < cnt; i++) {
+		mipi_dsi_buf_init(tp);
+		mipi_dsi_cmd_dma_add(tp, cm);
+		bp = tp->data;
+		for (j = 0; j < tp->len; j++) {
+			*(cmds_tx + k) = *bp++;
+			k++;
+		}
+		cmd_len = cmd_len + tp->len;
+		cm++;
+	}
+	tp->data = cmds_tx;
+	tp->len = cmd_len;
+	mipi_dsi_cmd_dma_tx(tp);
+	kfree(cmds_tx);
+
+	if (video_mode)
+		MIPI_OUTP(MIPI_DSI_BASE + 0x0000, dsi_ctrl); /* restore */
+	pr_debug("%s:---\n",__func__);
+
+	return cnt;
+}
+
 /* MIPI_DSI_MRPS, Maximum Return Packet Size */
 static char max_pktsize[2] = {0x00, 0x00}; /* LSB tx first, 10 bytes */
 
@@ -1616,7 +1677,9 @@ int mipi_dsi_cmd_dma_tx(struct dsi_buf *tp)
 		pr_err("%s: dma timeout error\n", __func__);
 		dumpreg(0);
 		dumstate(0);
+#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_tx_time_out_err_cnt++;
+#endif
 		mdp4_dump_regs();
 		dsi_clk_dump();
 		console_verbose();
@@ -1722,6 +1785,9 @@ void mipi_dsi_cmdlist_tx(struct dcs_cmd_req *req)
 
 	mipi_dsi_buf_init(&dsi_tx_buf);
 	tp = &dsi_tx_buf;
+	if (req->flags & CMD_REQ_SINGLE_TX)
+		ret = mipi_dsi_cmds_single_tx(tp, req->cmds, req->cmds_cnt);
+	else
 	ret = mipi_dsi_cmds_tx(tp, req->cmds, req->cmds_cnt);
 
 	if (req->cb)
@@ -1848,7 +1914,9 @@ void mipi_dsi_ack_err_status(void)
 
 	if (status) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0064, status);
+#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_ack_err_status = status;
+#endif
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -1860,7 +1928,9 @@ void mipi_dsi_timeout_status(void)
 	status = MIPI_INP(MIPI_DSI_BASE + 0x00bc);/* DSI_TIMEOUT_STATUS */
 	if (status & 0x0111) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x00bc, status);
+#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_timeout_status = status;
+#endif
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -1873,7 +1943,9 @@ void mipi_dsi_dln0_phy_err(void)
 
 	if (status & 0x011111) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x00b0, status);
+#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_dln0_phy_err = status;
+#endif
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -1886,7 +1958,9 @@ void mipi_dsi_fifo_status(void)
 
 	if (status & 0x44444489) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0008, status);
+#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_fifo_status = status;
+#endif
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -1899,7 +1973,9 @@ void mipi_dsi_status(void)
 
 	if (status & 0x80000000) {
 		MIPI_OUTP(MIPI_DSI_BASE + 0x0004, status);
+#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.mipi_dsi_status = status;
+#endif
 		pr_debug("%s: status=%x\n", __func__, status);
 	}
 }
@@ -1936,7 +2012,9 @@ int mipi_runtime_clk_change(int fps)
 
 	if (!rc) {
 		pr_err("%s: dma timeout error\n", __func__);
+#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.fps_chage_time_out_err_cnt++;
+#endif
 	}
 		
 	mutex_unlock(&fps_done_mutex);
@@ -1973,7 +2051,9 @@ int mipi_runtime_csc_update(uint32_t reg[][2], int length)
 
 	if (!rc) {
 		pr_err("%s: dma timeout error\n", __func__);
+#ifdef CONFIG_SEC_DEBUG_MDP
 		sec_debug_mdp.dsi_err.fps_chage_time_out_err_cnt++;
+#endif
 	}
 		
 	mutex_unlock(&fps_done_mutex);

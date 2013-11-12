@@ -1051,16 +1051,15 @@ clean:
 
 static void l2cap_conn_ready(struct l2cap_conn *conn)
 {
-	struct l2cap_chan *chan;
-	struct hci_conn *hcon = conn->hcon;
+	struct l2cap_chan_list *l = &conn->chan_list;
+	struct sock *sk;
 
 	BT_DBG("conn %p", conn);
 
-	if (!hcon->out && hcon->type == LE_LINK)
+	if (!conn->hcon->out && conn->hcon->type == LE_LINK)
 		l2cap_le_conn_ready(conn);
 
-	if (hcon->out && hcon->type == LE_LINK)
-		smp_conn_security(hcon, hcon->pending_sec_level);
+	read_lock(&l->lock);
 
 	if (l->head) {
 		for (sk = l->head; sk; sk = l2cap_pi(sk)->next_c) {
@@ -1073,9 +1072,8 @@ static void l2cap_conn_ready(struct l2cap_conn *conn)
 				if (pending_sec > sec_level)
 					sec_level = pending_sec;
 
-		if (hcon->type == LE_LINK) {
-			if (smp_conn_security(hcon, chan->sec_level))
-				l2cap_chan_ready(chan);
+				if (smp_conn_security(conn, sec_level))
+					l2cap_chan_ready(sk);
 
 				hci_conn_put(conn->hcon);
 
@@ -2027,11 +2025,7 @@ static void l2cap_ertm_send_rr_or_rnr(struct sock *sk, bool poll)
 	struct l2cap_pinfo *pi;
 	struct bt_l2cap_control control;
 
-	if (conn->mtu < L2CAP_HDR_SIZE + L2CAP_CMD_HDR_SIZE)
-		return NULL;
-
-	len = L2CAP_HDR_SIZE + L2CAP_CMD_HDR_SIZE + dlen;
-	count = min_t(unsigned int, conn->mtu, len);
+	BT_DBG("sk %p, poll %d", sk, (int) poll);
 
 	pi = l2cap_pi(sk);
 
@@ -2819,6 +2813,9 @@ static struct sk_buff *l2cap_build_cmd(struct l2cap_conn *conn,
 
 	BT_DBG("conn %p, code 0x%2.2x, ident 0x%2.2x, len %d",
 			conn, code, ident, dlen);
+
+	if (conn->mtu < L2CAP_HDR_SIZE + L2CAP_CMD_HDR_SIZE)
+		return NULL;
 
 	len = L2CAP_HDR_SIZE + L2CAP_CMD_HDR_SIZE + dlen;
 	count = min_t(unsigned int, mtu, len);
@@ -4467,13 +4464,88 @@ static inline int l2cap_config_rsp(struct l2cap_conn *conn, struct l2cap_cmd_hdr
 	if (!sk)
 		return 0;
 
-		if (type != L2CAP_CONF_RFC)
-			continue;
+	pi = l2cap_pi(sk);
 
-		if (olen != sizeof(rfc))
+	if (pi->reconf_state != L2CAP_RECONF_NONE)  {
+		l2cap_amp_move_reconf_rsp(sk, rsp->data, len, result);
+		goto done;
+	}
+
+	switch (result) {
+	case L2CAP_CONF_SUCCESS:
+		if (pi->conf_state & L2CAP_CONF_LOCKSTEP &&
+				!(pi->conf_state & L2CAP_CONF_LOCKSTEP_PEND)) {
+			/* Lockstep procedure requires a pending response
+			 * before success.
+			 */
+			l2cap_send_disconn_req(conn, sk, ECONNRESET);
+			goto done;
+		}
+
+		l2cap_conf_rfc_get(sk, rsp->data, len);
+		break;
+
+	case L2CAP_CONF_PENDING:
+		if (!(pi->conf_state & L2CAP_CONF_LOCKSTEP)) {
+			l2cap_send_disconn_req(conn, sk, ECONNRESET);
+			goto done;
+		}
+
+		l2cap_conf_rfc_get(sk, rsp->data, len);
+
+		pi->conf_state |= L2CAP_CONF_LOCKSTEP_PEND;
+
+		l2cap_conf_ext_fs_get(sk, rsp->data, len);
+
+		if (pi->amp_id && pi->conf_state & L2CAP_CONF_PEND_SENT) {
+			struct hci_chan *chan;
+
+			/* Already sent a 'pending' response, so set up
+			 * the logical link now
+			 */
+			chan = l2cap_chan_admit(pi->amp_id, sk);
+			if (!chan) {
+				l2cap_send_disconn_req(pi->conn, sk,
+							ECONNRESET);
+				goto done;
+			}
+
+			if (chan->state == BT_CONNECTED)
+				l2cap_create_cfm(chan, 0);
+		}
+
+		goto done;
+
+	case L2CAP_CONF_UNACCEPT:
+		if (pi->num_conf_rsp <= L2CAP_CONF_MAX_CONF_RSP) {
+			char req[64];
+
+			if (len > sizeof(req) - sizeof(struct l2cap_conf_req)) {
+				l2cap_send_disconn_req(conn, sk, ECONNRESET);
+				goto done;
+			}
+
+			/* throw out any old stored conf requests */
+			result = L2CAP_CONF_SUCCESS;
+			len = l2cap_parse_conf_rsp(sk, rsp->data,
+							len, req, &result);
+			if (len < 0) {
+				l2cap_send_disconn_req(conn, sk, ECONNRESET);
+				goto done;
+			}
+
+			l2cap_send_cmd(conn, l2cap_get_ident(conn),
+						L2CAP_CONF_REQ, len, req);
+			pi->num_conf_req++;
+			if (result != L2CAP_CONF_SUCCESS)
+				goto done;
 			break;
+		}
 
-		memcpy(&rfc, (void *)val, olen);
+	default:
+		sk->sk_err = ECONNRESET;
+		l2cap_sock_set_timer(sk, HZ * 5);
+		l2cap_send_disconn_req(conn, sk, ECONNRESET);
 		goto done;
 	}
 

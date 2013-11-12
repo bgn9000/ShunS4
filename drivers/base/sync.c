@@ -34,7 +34,7 @@
 static void sync_fence_signal_pt(struct sync_pt *pt);
 static int _sync_pt_has_signaled(struct sync_pt *pt);
 static void sync_fence_free(struct kref *kref);
-static void sync_dump(void);
+static void sync_dump(struct sync_fence *fence);
 
 static LIST_HEAD(sync_timeline_list_head);
 static DEFINE_SPINLOCK(sync_timeline_list_lock);
@@ -79,12 +79,12 @@ static void sync_timeline_free(struct kref *kref)
 		container_of(kref, struct sync_timeline, kref);
 	unsigned long flags;
 
-	if (obj->ops->release_obj)
-		obj->ops->release_obj(obj);
-
 	spin_lock_irqsave(&sync_timeline_list_lock, flags);
 	list_del(&obj->sync_timeline_list);
 	spin_unlock_irqrestore(&sync_timeline_list_lock, flags);
+
+	if (obj->ops->release_obj)
+		obj->ops->release_obj(obj);
 
 	kfree(obj);
 }
@@ -92,14 +92,14 @@ static void sync_timeline_free(struct kref *kref)
 void sync_timeline_destroy(struct sync_timeline *obj)
 {
 	obj->destroyed = true;
+	smp_wmb();
 
 	/*
-	 * If this is not the last reference, signal any children
-	 * that their parent is going away.
+	 * signal any children that their parent is going away.
 	 */
+	sync_timeline_signal(obj);
 
-	if (!kref_put(&obj->kref, sync_timeline_free))
-		sync_timeline_signal(obj);
+	kref_put(&obj->kref, sync_timeline_free);
 }
 EXPORT_SYMBOL(sync_timeline_destroy);
 
@@ -611,14 +611,16 @@ int sync_fence_wait(struct sync_fence *fence, long timeout)
 
 	if (fence->status < 0) {
 		pr_info("fence error %d on [%p]\n", fence->status, fence);
-		sync_dump();
+		sync_dump(fence);
 		return fence->status;
 	}
 
 	if (fence->status == 0) {
-		pr_info("fence timeout on [%p] after %dms\n", fence,
-			jiffies_to_msecs(timeout));
-		sync_dump();
+		if (timeout > 0) {
+			pr_info("fence timeout on [%p] after %dms\n", fence,
+				jiffies_to_msecs(timeout));
+			sync_dump(fence);
+		}
 		return -ETIME;
 	}
 
@@ -771,8 +773,9 @@ static int sync_fill_pt_info(struct sync_pt *pt, void *data, int size)
 	}
 
 	strlcpy(info->obj_name, pt->parent->name, sizeof(info->obj_name));
-	strlcpy(info->driver_name, pt->parent->ops->driver_name,
-		sizeof(info->driver_name));
+	if (pt->parent->ops->driver_name)
+		strlcpy(info->driver_name, pt->parent->ops->driver_name,
+			sizeof(info->driver_name));
 	info->status = pt->status;
 	info->timestamp_ns = ktime_to_ns(pt->timestamp);
 
@@ -999,7 +1002,7 @@ late_initcall(sync_debugfs_init);
 
 #define DUMP_CHUNK 256
 static char sync_dump_buf[64 * 1024];
-void sync_dump(void)
+static void sync_dump(struct sync_fence *fence)
 {
        struct seq_file s = {
                .buf = sync_dump_buf,
@@ -1007,7 +1010,9 @@ void sync_dump(void)
        };
        int i;
 
-       sync_debugfs_show(&s, NULL);
+       seq_printf(&s, "fence:\n--------------\n");
+       sync_print_fence(&s, fence);
+       seq_printf(&s, "\n");
 
        for (i = 0; i < s.count; i += DUMP_CHUNK) {
                if ((s.count - i) > DUMP_CHUNK) {
@@ -1022,7 +1027,7 @@ void sync_dump(void)
        }
 }
 #else
-static void sync_dump(void)
+static void sync_dump(struct sync_fence *fence)
 {
 }
 #endif
