@@ -28,6 +28,18 @@
 #include "devices.h"
 #include "board-8064.h"
 
+//KT Specifics
+static bool ktoonservative_is_activef = false;
+extern void set_screen_on_off_mhz(bool onoff);
+extern void set_screen_on_off_flag(bool onoff);
+extern void set_screen_on_off_flaghk(bool onoff);
+extern void screen_is_on_relay_kt(bool state);
+
+void ktoonservative_is_activebd(bool val)
+{
+	ktoonservative_is_activef = val;
+}
+
 #ifdef CONFIG_FB_MSM_TRIPLE_BUFFER
 #if defined(CONFIG_FB_MSM_MIPI_SAMSUNG_OLED_VIDEO_HD_PT_PANEL)
 /* prim = 1280 x 736 x 3(bpp) x 3(pages) */
@@ -272,6 +284,9 @@ static struct msm_bus_scale_pdata mdp_bus_scale_pdata = {
 static struct msm_panel_common_pdata mdp_pdata = {
 	.gpio = MDP_VSYNC_GPIO,
 	.mdp_max_clk = 266667000,
+	.mdp_max_bw = 4290000000u,
+	.mdp_bw_ab_factor = 115,
+	.mdp_bw_ib_factor = 200,
 	.mdp_bus_scale_table = &mdp_bus_scale_pdata,
 	.mdp_rev = MDP_REV_44,
 #ifdef CONFIG_MSM_MULTIMEDIA_USE_ION
@@ -381,11 +396,15 @@ static bool oled_power_on;
 /* [junesok] Power on for samsung oled */
 #if defined(CONFIG_MACH_JACTIVE_EUR)
 #define LCD_22V_EN	33
+#if defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
 #define LCD_22V_EN_2	20
+#endif
 #define PMIC_GPIO_LED_DRIVER 31
 #elif defined(CONFIG_MACH_JACTIVE_ATT)
 #define LCD_22V_EN	33
+#if defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
 #define LCD_22V_EN_2	20
+#endif
 #define PMIC_GPIO_LED_DRIVER_REV00 28
 #define PMIC_GPIO_LED_DRIVER_REV10 31
 #else
@@ -540,6 +559,7 @@ static int mipi_dsi_power_tft_request(void)
 		gpio_tlmm_config(GPIO_CFG(LCD_22V_EN,  0, GPIO_CFG_OUTPUT,
 		GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 
+#if defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
 		if( system_rev >= 13 ) // rev0.5 + 8
 		{
 			pr_info("[lcd] request gpio lcd_22v_en_2\n");
@@ -556,6 +576,7 @@ static int mipi_dsi_power_tft_request(void)
 			gpio_tlmm_config(GPIO_CFG(LCD_22V_EN_2,  0, GPIO_CFG_OUTPUT,
 			GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 		}
+#endif
 	}
 #else
 	pr_info("[lcd] request gpio lcd_22v_en\n");
@@ -570,6 +591,7 @@ static int mipi_dsi_power_tft_request(void)
 	gpio_tlmm_config(GPIO_CFG(LCD_22V_EN,  0, GPIO_CFG_OUTPUT,
 		GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 
+#if defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
 	if( system_rev >= 16 ) // rev0.6 + 10
 	{
 		pr_info("[lcd] request gpio lcd_22v_en_2\n");
@@ -582,6 +604,7 @@ static int mipi_dsi_power_tft_request(void)
 		gpio_tlmm_config(GPIO_CFG(LCD_22V_EN_2,  0, GPIO_CFG_OUTPUT,
 			GPIO_CFG_NO_PULL, GPIO_CFG_2MA), GPIO_CFG_ENABLE);
 	}
+#endif
 #endif
 
 	if (system_rev == 0) {
@@ -621,34 +644,6 @@ static int mipi_dsi_power_tft_request(void)
 		pr_err("gpio_config led_dirver failed (3), rc=%d\n", rc);
 		return -EINVAL;
 	}
-#if defined(CONFIG_MACH_JACTIVE_ATT)
-	if(system_rev < 10)
-		gpio_direction_output(gpio33, 0);
-	else
-	{
-		gpio_direction_output(LCD_22V_EN, 0);
-		if( system_rev >= 13 ) // rev0.5 + 8
-		{
-			mdelay(10);
-			gpio_direction_output(LCD_22V_EN_2, 0);
-		}
-	}
-#else
-	gpio_direction_output(LCD_22V_EN, 0);
-	if( system_rev >= 16 ) // rev0.6 + 10
-	{
-		mdelay(10);
-		gpio_direction_output(LCD_22V_EN_2, 0);
-	}
-#endif
-	if (system_rev == 0)
-		gpio_direction_output(gpio43, 0);
-	else
-		pm8xxx_mpp_config(
-			PM8921_MPP_PM_TO_SYS(MLCD_RST_MPP2),
-			&MLCD_RESET_LOW_CONFIG);
-
-	msleep(1000);
 
 	gpio_direction_output(gpio27, 0);
 
@@ -704,19 +699,23 @@ static int mipi_panel_power_tft(int enable)
 	else
 	{
 		gpio_direction_output(LCD_22V_EN, 1);
+#if defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
 		if( system_rev >= 13 ) // rev0.5 + 8
 		{
 			mdelay(10);
 			gpio_direction_output(LCD_22V_EN_2, 1);
 		}
+#endif
 	}
 #else
 		gpio_direction_output(LCD_22V_EN, 1);
+#if defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
 		if( system_rev >= 16 ) // rev0.6 + 10
 		{
 			mdelay(10);
 			gpio_direction_output(LCD_22V_EN_2, 1);
 		}
+#endif
 #endif
 
 		msleep(20);
@@ -767,19 +766,23 @@ static int mipi_panel_power_tft(int enable)
 			gpio_direction_output(gpio33, 0);
 		else
 		{
+#if defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
 			if( system_rev >= 13 ) // rev0.5 + 8
 			{
 				gpio_direction_output(LCD_22V_EN_2, 0);
 				mdelay(10);
 			}
+#endif
 			gpio_direction_output(LCD_22V_EN, 0);
 		}
 #else
+#if defined(CONFIG_FB_MSM_ENABLE_LCD_EN2)
 		if( system_rev >= 16 ) // rev0.6 + 10
 		{
 			gpio_direction_output(LCD_22V_EN_2, 0);
 			mdelay(10);
 		}
+#endif
 		gpio_direction_output(LCD_22V_EN, 0);
 #endif
 		usleep(2000); /*1ms delay(minimum) required between VDD off and AVDD off*/
@@ -894,7 +897,6 @@ static int mipi_panel_power_oled(int enable)
 	int rc = 0;
 
 	if (enable) {
-
 		pr_info("[lcd] PANEL ON\n");
 
 		/* 3000mv VCI(ANALOG) */
@@ -926,8 +928,12 @@ static int mipi_panel_power_oled(int enable)
 			return -ENODEV;
 		}
 #endif
+		set_screen_on_off_mhz(true);
+		set_screen_on_off_flag(true);
+		set_screen_on_off_flaghk(true);
+		if (ktoonservative_is_activef)
+			screen_is_on_relay_kt(true);
 	} else {
-
 		pr_info("[lcd] PANEL OFF\n");
 
 #ifdef CONFIG_LCD_VDD3_BY_PMGPIO
@@ -956,6 +962,12 @@ static int mipi_panel_power_oled(int enable)
 			pr_err("disable reg_L30 failed, rc=%d\n", rc);
 			return -ENODEV;
 		}
+		set_screen_on_off_mhz(false);
+		set_screen_on_off_flag(false);
+		set_screen_on_off_flaghk(false);
+		if (ktoonservative_is_activef)
+			screen_is_on_relay_kt(false);
+		//pr_alert("KT_RELAY_CALL  FROM SCREEN\n");
 	}
 
 	return rc;
