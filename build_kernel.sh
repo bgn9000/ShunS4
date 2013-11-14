@@ -8,8 +8,8 @@ export PLATFORM="AOSP"
 export MREV="JB4.3"
 export CURDATE=`date "+%Y%m%d_%H%M%S"`
 export MUXEDNAMELONG="ShunS4-$MREV-$PLATFORM-INTL-$CURDATE"
-export MUXEDNAMESHRT="ShunS4-$MREV-$PLATFORM-INTL*"
-export ShunS4Ver="--$MUXEDNAMELONG--"
+export MUXEDNAMESHRT="ShunS4-$MREV-$PLATFORM-INTL"
+export ShunS4Ver="--$MUXEDNAMESHRT--"
 export RAMFS_SOURCE=`readlink -f ..`/SGS4-RAMDISKS/$PLATFORM"_INTL-JB4.3"
 RAMFS_TMP="/tmp/ramfs-source-sgs4"
 export KERNELDIR=`readlink -f .`
@@ -37,10 +37,6 @@ chmod -R g-w $RAMFS_TMP/*
 rm $(find $RAMFS_TMP -name EMPTY_DIRECTORY -print)
 rm -rf $(find $RAMFS_TMP -name .git -print)
 
-echo "Remove old zImage"
-rm $PACKAGEDIR/zImage
-rm arch/arm/boot/zImage
-
 if [ ! -f $KERNELDIR/.config ];
 then
   make VARIANT_DEFCONFIG=jf_INTL_defconfig SELINUX_DEFCONFIG=jfselinux_defconfig SELINUX_LOG_DEFCONFIG=jfselinux_log_defconfig KT_jf_defconfig
@@ -59,6 +55,9 @@ cp -a $(find . -name *.ko -print |grep -v initramfs) $PACKAGEDIR/system/lib/modu
 if [ -e $KERNELDIR/arch/arm/boot/zImage ]; then
 	echo "Copy zImage to Package"
 	cp arch/arm/boot/zImage $PACKAGEDIR/zImage
+	
+	echo "Copy KT app"
+	cp -v $PARENT_DIR/Packages/com.ktoonsez.KTweaker.apk $PACKAGEDIR/system/app/
 
 	echo "Make boot.img"
 	./mkbootfs $RAMFS_TMP | gzip > $PACKAGEDIR/ramdisk.gz
@@ -67,7 +66,6 @@ if [ -e $KERNELDIR/arch/arm/boot/zImage ]; then
 	cp -R ../META-INF .
 	rm ramdisk.gz
 	rm zImage
-	rm ../$MUXEDNAMESHRT.zip
 	zip -r ../$MUXEDNAMELONG.zip .
 	
 	cd $KERNELDIR
