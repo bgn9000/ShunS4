@@ -20,7 +20,7 @@ export PACKAGEDIR=$PARENT_DIR/Packages/$PLATFORM
 #Enable FIPS mode
 export USE_SEC_FIPS_MODE=true
 export ARCH=arm
-export CROSS_COMPILE=$PARENT_DIR/../arm-2012/bin_472/arm-linux-gnueabihf-
+export CROSS_COMPILE=$PARENT_DIR/../arm-2012/bin_472/arm-linux-
 
 echo "Remove old Package Files"
 rm -rf $PACKAGEDIR/*

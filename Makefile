@@ -247,9 +247,12 @@ HOSTCC       = gcc
 HOSTCXX      = g++
 O3_02 := -fpredictive-commoning -fgcse-after-reload -fipa-cp-clone \
 	-funswitch-loops -ftree-vectorize -ftree-loop-distribute-patterns
+#O3_02 :=
 Ofast_O3 := -ffast-math
+XX_A9 	    = 	-marm -march=armv7-a -mcpu=cortex-a9 -mfpu=vfp3 -mfloat-abi=softfp
+XX_A15 	    = 	-marm -mcpu=cortex-a15 -mtune=cortex-a15 -mfpu=neon-vfpv4 -mfloat-abi=softfp
 HOSTCFLAGS   = -Wall -Wmissing-prototypes -Wstrict-prototypes -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant -fomit-frame-pointer
-HOSTCXXFLAGS = -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -mvectorize-with-neon-quad
+HOSTCXXFLAGS = -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant $(XX_A9) -mvectorize-with-neon-quad
 
 # Decide whether to build built-in, modular, or both.
 # Normally, just do built-in.
@@ -355,13 +358,13 @@ CC		= $(srctree)/scripts/gcc-wrapper.py $(REAL_CC)
 
 CHECKFLAGS     := -D__linux__ -Dlinux -D__STDC__ -Dunix -D__unix__ \
 		  -Wbitwise -Wno-return-void $(CF)
-MODFLAGS	= -DMODULE -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -fno-pic -marm -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad
+MODFLAGS	= -DMODULE -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant $(XX_A9) -fno-pic -ftree-vectorize -mvectorize-with-neon-quad
 
 CFLAGS_MODULE   = $(MODFLAGS)
 AFLAGS_MODULE   = $(MODFLAGS)
 LDFLAGS_MODULE  = -T $(srctree)/scripts/module-common.lds
-CFLAGS_KERNEL	= -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -funswitch-loops -mvectorize-with-neon-quad
-AFLAGS_KERNEL	= -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -funswitch-loops -mvectorize-with-neon-quad
+CFLAGS_KERNEL	= -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant $(XX_A9) -funswitch-loops -mvectorize-with-neon-quad
+AFLAGS_KERNEL	= -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant $(XX_A9) -funswitch-loops -mvectorize-with-neon-quad
 
 
 # Use LINUXINCLUDE when you must reference the include/ directory.
@@ -371,15 +374,15 @@ LINUXINCLUDE    := -I$(srctree)/arch/$(hdr-arch)/include \
                    $(if $(KBUILD_SRC), -I$(srctree)/include) \
                    -include $(srctree)/include/linux/kconfig.h
 
-KBUILD_CPPFLAGS := -D__KERNEL__ -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad
+KBUILD_CPPFLAGS := -D__KERNEL__ -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant $(XX_A9) -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad
 
 KBUILD_CFLAGS   := -Wall -Wundef -Wstrict-prototypes -Wno-trigraphs \
 		   -fno-strict-aliasing -fno-common \
 		   -Werror-implicit-function-declaration \
 		   -Wno-format-security -Wno-unused-function -Wno-array-bounds -Wno-uninitialized \
 		   -fno-delete-null-pointer-checks -Wno-unused-variable -Wno-maybe-uninitialized -Wno-cpp -Wno-declaration-after-statement
-KBUILD_AFLAGS_KERNEL := -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad
-KBUILD_CFLAGS_KERNEL := -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -marm -mfpu=neon-vfpv4 -ftree-vectorize -mvectorize-with-neon-quad
+KBUILD_AFLAGS_KERNEL := -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant $(XX_A9) -ftree-vectorize -mvectorize-with-neon-quad
+KBUILD_CFLAGS_KERNEL := -O2 $(O3_O2) $(Ofast_O3) -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -fsingle-precision-constant $(XX_A9) -ftree-vectorize -mvectorize-with-neon-quad
 KBUILD_AFLAGS   := -D__ASSEMBLY__
 KBUILD_AFLAGS_MODULE  := -DMODULE
 KBUILD_CFLAGS_MODULE  := -DMODULE -fgcse-lm -fgcse-sm -fsched-spec-load -fforce-addr -ffast-math -fsingle-precision-constant -mcpu=cortex-a15 -mtune=cortex-a15 -mfpu=neon-vfpv4 -ftree-vectorize -funswitch-loops -Wno-cpp
